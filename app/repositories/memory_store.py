@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
 from uuid import uuid4
 
 
@@ -27,7 +26,7 @@ class MediaRecord:
     id: str
     filename: str
     content_type: str
-    path: Path
+    object_key: str
 
 
 @dataclass
