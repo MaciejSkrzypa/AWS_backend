@@ -10,7 +10,9 @@ Wszystkie endpointy API poza `GET /api/health` wymagają prawidłowego access to
 cp -n .env.example .env
 ```
 
-Uzupełnij `COGNITO_REGION`, `COGNITO_USER_POOL_ID` i `COGNITO_USER_POOL_CLIENT_ID` wartościami z `terraform output`. `COGNITO_USER_POOL_CLIENT_ID` musi wskazywać klienta Cognito przeznaczonego dla frontendu. Klient nie ma sekretu; backend weryfikuje podpis, issuer, czas ważności, typ tokenu (`access`) i client ID.
+Uzupełnij `COGNITO_REGION`, `COGNITO_USER_POOL_ID` i `COGNITO_USER_POOL_CLIENT_ID` wartościami z `terraform output`. Ustaw także `AWS_REGION` i `S3_MEDIA_BUCKET` wartościami z Terraform. Backend korzysta z domyślnego łańcucha poświadczeń AWS SDK (lokalnie AWS CLI/zmienne środowiskowe, w chmurze rola wykonawcza); przypisz tej tożsamości politykę o ARN z outputu `media_access_policy_arn`. Nie dodawaj kluczy AWS do plików `.env`.
+
+`COGNITO_USER_POOL_CLIENT_ID` musi wskazywać klienta Cognito przeznaczonego dla frontendu. Klient nie ma sekretu; backend weryfikuje podpis, issuer, czas ważności, typ tokenu (`access`) i client ID.
 
 Plik `.env` jest ignorowany przez Git. Następnie uruchom API z katalogu `backend/`:
 
@@ -26,7 +28,7 @@ API będzie dostępne pod `http://localhost:8000`, a interaktywna dokumentacja p
 
 ## Docker
 
-W głównym katalogu projektu Docker Compose ładuje `backend/.env` do obu kontenerów:
+W głównym katalogu projektu Docker Compose ładuje `backend/.env` do backendu i montuje `~/.aws` tylko do odczytu, aby kontener mógł użyć profilu AWS CLI:
 
 ```bash
 docker compose up --build
@@ -34,7 +36,7 @@ docker compose up --build
 
 Po pierwszym buildzie wystarczy `docker compose up`. Frontend pobiera identyfikatory Cognito jako konfigurację runtime, nie są one wbudowywane w obraz.
 
-Wolumen `gather_uploads` zachowuje przesłane pliki po usunięciu kontenera. Backend nie udostępnia obecnie trwałego magazynu dla pokoi, wiadomości ani metadanych — te dane są przechowywane w pamięci i znikają po restarcie procesu.
+Pliki są przesyłane bezpośrednio z przeglądarki do prywatnego bucketu S3. Pokoje, wiadomości i metadane plików są nadal przechowywane w pamięci backendu i znikają po restarcie procesu.
 
 ## Endpointy
 
@@ -45,8 +47,7 @@ Wolumen `gather_uploads` zachowuje przesłane pliki po usunięciu kontenera. Bac
 | `POST` | `/api/rooms` | Utworzenie pokoju |
 | `GET` | `/api/rooms/{room_id}/messages` | Lista wiadomości w pokoju |
 | `POST` | `/api/rooms/{room_id}/messages` | Wysłanie wiadomości tekstowej lub z załącznikiem |
-| `POST` | `/api/media` | Przesłanie pliku graficznego, audio lub wideo (do 25 MB) |
-| `GET` | `/api/media/{media_id}` | Pobranie przesłanego pliku |
+| `POST` | `/api/media/upload-url` | Wygenerowanie formularza presigned POST do uploadu bezpośrednio do S3 |
 
 Jedynym publicznym endpointem jest `GET /api/health`. Pozostałe ścieżki `/api` odrzucają brakujący lub nieprawidłowy token (401). Jeśli zmienne Cognito nie są skonfigurowane, endpointy chronione zwracają 503 i nie otwierają dostępu bez uwierzytelnienia. CORS origins można ustawić zmienną `CORS_ORIGINS` (lista originów rozdzielona przecinkami).
 
@@ -59,7 +60,7 @@ Tworzenie pokoju przyjmuje JSON, np.:
 }
 ```
 
-Wiadomość przyjmuje JSON z polami `text` i opcjonalnym `media_id`. Pole `author` jest nadpisywane przez backend nazwą użytkownika z zweryfikowanego access tokenu, więc klient nie może podszyć się pod innego autora. Upload używa `multipart/form-data` z polem `file`; zwrócone `id` można przekazać jako `media_id` podczas tworzenia wiadomości.
+Endpoint uploadu przyjmuje JSON z `filename` i `content_type`, a zwraca `id`, `upload_url` oraz pola formularza. Frontend wysyła plik metodą `POST` bezpośrednio do S3, a zwrócone `id` przekazuje jako `media_id` podczas tworzenia wiadomości. Bucket ogranicza upload do 25 MB i typów image/audio/video. Odpowiedzi wiadomości zawierają krótkotrwały presigned URL do pobrania załącznika. Tożsamość backendu otrzymuje `s3:PutObject` i `s3:GetObject` w prefiksie `media/*` oraz ograniczone `s3:ListBucket` potrzebne do odróżnienia nieprzesłanego obiektu.
 
 ## Struktura
 
@@ -74,4 +75,4 @@ app/
   main.py        # Aplikacja FastAPI, middleware i routery
 ```
 
-Obecny magazyn w `app/repositories/memory_store.py` jest tymczasowy. Docelowo repozytorium można zastąpić integracją z AWS RDS, a zapis plików w `app/services/media.py` — integracją z S3. Uwierzytelnianie Cognito jest już wymagane dla wszystkich endpointów API poza `/api/health`.
+Obecny magazyn w `app/repositories/memory_store.py` jest tymczasowy. Metadane S3 są przechowywane w pamięci; docelowo należy zastąpić je trwałym repozytorium razem z pokojami i wiadomościami. Uwierzytelnianie Cognito jest już wymagane dla wszystkich endpointów API poza `/api/health`.
