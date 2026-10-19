@@ -25,6 +25,18 @@ class RoomOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    code: str
     name: str
     topic: str
     created_at: datetime
+
+
+class RoomJoin(BaseModel):
+    code: str = Field(pattern=r"^[A-HJ-NP-Z2-9]{10}$")
+
+    @field_validator("code", mode="before")
+    @classmethod
+    def normalize_code(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise ValueError("Kod pokoju musi być tekstem.")
+        return value.strip().replace("-", "").replace(" ", "").upper()

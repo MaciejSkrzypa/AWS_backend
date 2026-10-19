@@ -4,13 +4,13 @@ Backend aplikacji Gather jest zbudowany w FastAPI. Rejestracja endpointów, wali
 
 ## Uruchomienie lokalne
 
-Wszystkie endpointy API poza `GET /api/health` wymagają prawidłowego access tokenu Cognito. Skopiuj przykładowy plik środowiskowy:
+Wszystkie endpointy API poza `GET /api/health` wymagają prawidłowego access tokenu Cognito. Po utworzeniu zasobów AWS przez Terraform wygeneruj konfigurację z outputów:
 
 ```bash
-cp -n .env.example .env
+python3 scripts/sync_terraform_env.py
 ```
 
-Uzupełnij `COGNITO_REGION`, `COGNITO_USER_POOL_ID` i `COGNITO_USER_POOL_CLIENT_ID` wartościami z `terraform output`. Ustaw także `AWS_REGION` i `S3_MEDIA_BUCKET` wartościami z Terraform. Backend korzysta z domyślnego łańcucha poświadczeń AWS SDK (lokalnie AWS CLI/zmienne środowiskowe, w chmurze rola wykonawcza); przypisz tej tożsamości politykę o ARN z outputu `media_access_policy_arn`. Nie dodawaj kluczy AWS do plików `.env`.
+Skrypt aktualizuje `backend/.env` oraz identyfikatory Cognito w `frontend/.env` (i w istniejącym `frontend/.env.local`). Backend korzysta z domyślnego łańcucha poświadczeń AWS SDK (lokalnie AWS CLI/zmienne środowiskowe, w chmurze rola wykonawcza); przypisz tej tożsamości polityki o ARN-ach z outputów `media_access_policy_arn` i `data_access_policy_arn`. Nie dodawaj kluczy AWS do plików `.env`.
 
 `COGNITO_USER_POOL_CLIENT_ID` musi wskazywać klienta Cognito przeznaczonego dla frontendu. Klient nie ma sekretu; backend weryfikuje podpis, issuer, czas ważności, typ tokenu (`access`) i client ID.
 
@@ -45,6 +45,7 @@ Pliki są przesyłane bezpośrednio z przeglądarki do prywatnego bucketu S3. Po
 | `GET` | `/api/health` | Status API |
 | `GET` | `/api/rooms` | Lista pokoi |
 | `POST` | `/api/rooms` | Utworzenie pokoju |
+| `POST` | `/api/rooms/join` | Wyszukanie i dołączenie do pokoju po kodzie |
 | `GET` | `/api/rooms/{room_id}/messages` | Lista wiadomości w pokoju |
 | `POST` | `/api/rooms/{room_id}/messages` | Wysłanie wiadomości tekstowej lub z załącznikiem |
 | `POST` | `/api/media/upload-url` | Wygenerowanie formularza presigned POST do uploadu bezpośrednio do S3 |
@@ -62,6 +63,10 @@ Tworzenie pokoju przyjmuje JSON, np.:
 
 Endpoint uploadu przyjmuje JSON z `filename` i `content_type`, a zwraca `id`, `upload_url` oraz pola formularza. Frontend wysyła plik metodą `POST` bezpośrednio do S3, a zwrócone `id` przekazuje jako `media_id` podczas tworzenia wiadomości. Bucket ogranicza upload do 25 MB i typów image/audio/video. Odpowiedzi wiadomości zawierają krótkotrwały presigned URL do pobrania załącznika. Tożsamość backendu otrzymuje `s3:PutObject` i `s3:GetObject` w prefiksie `media/*` oraz ograniczone `s3:ListBucket` potrzebne do odróżnienia nieprzesłanego obiektu.
 
+Odpowiedź tworzenia pokoju zawiera wygenerowane pole `code` (10 znaków). Kod można wpisać w formularzu „Dołącz kodem”; API przyjmuje również zapis kodu z łącznikami lub spacjami. Lista pokoi oraz odczyt i wysyłanie wiadomości są ograniczone do zalogowanego twórcy pokoju i osób, które dołączyły przez kod. Samo uwierzytelnienie nie daje dostępu do pozostałych pokojów.
+
+Pokoje, wiadomości i metadane załączników są trwale zapisywane w tabelach DynamoDB utworzonych przez Terraform. Nazwy tabel przekazuje się przez zmienne `DYNAMODB_ROOMS_TABLE`, `DYNAMODB_MESSAGES_TABLE` i `DYNAMODB_MEDIA_TABLE`; w razie braku konfiguracji API zwraca błąd 503 zamiast przechodzić na magazyn ulotny.
+
 ## Struktura
 
 ```text
@@ -75,4 +80,4 @@ app/
   main.py        # Aplikacja FastAPI, middleware i routery
 ```
 
-Obecny magazyn w `app/repositories/memory_store.py` jest tymczasowy. Metadane S3 są przechowywane w pamięci; docelowo należy zastąpić je trwałym repozytorium razem z pokojami i wiadomościami. Uwierzytelnianie Cognito jest już wymagane dla wszystkich endpointów API poza `/api/health`.
+Repozytorium w `app/repositories/dynamodb.py` zapisuje pokoje, wiadomości i metadane plików w DynamoDB. Pliki binarne są w prywatnym S3. Uwierzytelnianie Cognito jest wymagane dla wszystkich endpointów API poza `/api/health`.
