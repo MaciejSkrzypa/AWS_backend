@@ -10,8 +10,11 @@ router = APIRouter(prefix="/rooms/{room_id}/messages", tags=["messages"])
 
 
 @router.get("", response_model=list[MessageOut])
-def get_messages(room_id: str) -> list[MessageOut]:
-    return list_messages(room_id)
+def get_messages(
+    room_id: str,
+    identity: dict[str, Any] = Depends(require_cognito_access_token),
+) -> list[MessageOut]:
+    return list_messages(room_id, identity["sub"])
 
 
 @router.post("", response_model=MessageOut, status_code=status.HTTP_201_CREATED)
@@ -22,4 +25,4 @@ def post_message(
 ) -> MessageOut:
     author = identity.get("username") or identity["sub"]
     authenticated_message = message.model_copy(update={"author": author})
-    return create_message(room_id, authenticated_message)
+    return create_message(room_id, authenticated_message, identity["sub"])

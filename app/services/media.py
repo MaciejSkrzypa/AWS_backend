@@ -7,7 +7,9 @@ from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import HTTPException, status
 
 from app.errors import ResourceNotFound, UnsupportedMediaType
-from app.repositories.memory_store import MediaRecord, store
+from app.repositories.dynamodb import get_media as find_media
+from app.repositories.dynamodb import save_media
+from app.repositories.records import MediaRecord
 from app.schemas.media import MediaOut, MediaUploadOut, MediaUploadRequest
 
 MAX_UPLOAD_SIZE = 25 * 1024 * 1024
@@ -85,7 +87,7 @@ def create_media_upload(data: MediaUploadRequest) -> MediaUploadOut:
             detail="Nie udało się przygotować przesyłania do S3.",
         ) from error
 
-    store.media_files[media_id] = media
+    save_media(media)
     return MediaUploadOut(
         id=media.id,
         filename=media.filename,
@@ -96,7 +98,7 @@ def create_media_upload(data: MediaUploadRequest) -> MediaUploadOut:
 
 
 def verify_media_uploaded(media_id: str) -> MediaRecord:
-    media = store.media_files.get(media_id)
+    media = find_media(media_id)
     if media is None:
         raise ResourceNotFound("Nie znaleziono pliku.")
 
