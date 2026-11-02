@@ -45,7 +45,7 @@ Pliki są przesyłane bezpośrednio z przeglądarki do prywatnego bucketu S3. Po
 | `GET` | `/api/health` | Status API |
 | `GET` | `/api/rooms` | Lista pokoi |
 | `POST` | `/api/rooms` | Utworzenie pokoju |
-| `POST` | `/api/rooms/join` | Wyszukanie i dołączenie do pokoju po kodzie |
+| `POST` | `/api/rooms/join` | Wyszukanie i dołączenie do pokoju po identyfikatorze |
 | `GET` | `/api/rooms/{room_id}/messages` | Lista wiadomości w pokoju |
 | `POST` | `/api/rooms/{room_id}/messages` | Wysłanie wiadomości tekstowej lub z załącznikiem |
 | `POST` | `/api/media/upload-url` | Wygenerowanie formularza presigned POST do uploadu bezpośrednio do S3 |
@@ -56,16 +56,19 @@ Tworzenie pokoju przyjmuje JSON, np.:
 
 ```json
 {
-  "name": "general",
-  "topic": "Wszystko, co warto omówić"
+  "name": "general"
 }
 ```
 
 Endpoint uploadu przyjmuje JSON z `filename` i `content_type`, a zwraca `id`, `upload_url` oraz pola formularza. Frontend wysyła plik metodą `POST` bezpośrednio do S3, a zwrócone `id` przekazuje jako `media_id` podczas tworzenia wiadomości. Bucket ogranicza upload do 25 MB i typów image/audio/video. Odpowiedzi wiadomości zawierają krótkotrwały presigned URL do pobrania załącznika. Tożsamość backendu otrzymuje `s3:PutObject` i `s3:GetObject` w prefiksie `media/*` oraz ograniczone `s3:ListBucket` potrzebne do odróżnienia nieprzesłanego obiektu.
 
-Odpowiedź tworzenia pokoju zawiera wygenerowane pole `code` (10 znaków). Kod można wpisać w formularzu „Dołącz kodem”; API przyjmuje również zapis kodu z łącznikami lub spacjami. Lista pokoi oraz odczyt i wysyłanie wiadomości są ograniczone do zalogowanego twórcy pokoju i osób, które dołączyły przez kod. Samo uwierzytelnienie nie daje dostępu do pozostałych pokojów.
+Odpowiedź tworzenia pokoju zawiera wygenerowane pole `id` (10 znaków), które jest jednocześnie identyfikatorem i kodem dołączania. API przyjmuje identyfikator w polu `id`; zapis z łącznikami lub spacjami jest normalizowany. Odpowiedź pokoju zawiera również aktualną liczbę członków. Lista pokoi oraz odczyt i wysyłanie wiadomości są ograniczone do zalogowanego twórcy pokoju i osób, które dołączyły po identyfikatorze. Samo uwierzytelnienie nie daje dostępu do pozostałych pokojów.
+
+Rejestracja Cognito wymaga podania nickname (`preferred_username`). Przy wysyłaniu wiadomości backend pobiera profil z Cognito `GetUser` z użyciem zweryfikowanego access tokenu i używa nickname'u jako nazwy autora.
 
 Pokoje, wiadomości i metadane załączników są trwale zapisywane w tabelach DynamoDB utworzonych przez Terraform. Nazwy tabel przekazuje się przez zmienne `DYNAMODB_ROOMS_TABLE`, `DYNAMODB_MESSAGES_TABLE` i `DYNAMODB_MEDIA_TABLE`; w razie braku konfiguracji API zwraca błąd 503 zamiast przechodzić na magazyn ulotny.
+
+Wiadomość zapisuje `author` jako nickname widoczny w historii oraz `author_id` jako niezmienny identyfikator `sub` z Cognito. Dzięki temu nazwa jest migawką z chwili wysłania, a autora można stabilnie rozpoznać, jeśli później zmieni nickname. Starsze wiadomości bez `author_id` nadal są obsługiwane.
 
 ## Struktura
 

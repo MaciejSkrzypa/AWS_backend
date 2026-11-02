@@ -51,6 +51,7 @@ def create_message(
     message = MessageRecord(
         id=str(uuid4()),
         room_id=room_id,
+        author_id=member_id,
         author=data.author,
         text=data.text,
         media_id=data.media_id,

@@ -9,7 +9,7 @@ from app.repositories.dynamodb import list_rooms as find_rooms
 from app.repositories.records import RoomRecord
 from app.schemas.rooms import RoomCreate, RoomJoin, RoomOut
 
-ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+ROOM_ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 
 def list_rooms(member_id: str) -> list[RoomOut]:
@@ -25,21 +25,20 @@ def get_room(room_id: str, member_id: str) -> RoomRecord:
 
 
 def join_room(data: RoomJoin, member_id: str) -> RoomOut:
-    room = find_room(data.code)
+    room = find_room(data.id)
     if room is None:
-        raise ResourceNotFound("Nie znaleziono pokoju o podanym kodzie.")
+        raise ResourceNotFound("Nie znaleziono pokoju o podanym identyfikatorze.")
     add_room_member(room.id, member_id)
+    room.member_ids.add(member_id)
     return RoomOut.model_validate(room)
 
 
 def create_room(data: RoomCreate, member_id: str) -> RoomOut:
     while True:
-        code = "".join(secrets.choice(ROOM_CODE_ALPHABET) for _ in range(10))
+        room_id = "".join(secrets.choice(ROOM_ID_ALPHABET) for _ in range(10))
         room = RoomRecord(
-            id=code,
-            code=code,
+            id=room_id,
             name=data.name,
-            topic=data.topic,
             created_at=datetime.now(timezone.utc),
             member_ids={member_id},
         )
