@@ -42,9 +42,7 @@ def list_rooms(member_id: str) -> list[RoomRecord]:
             rooms.extend(
                 RoomRecord(
                     id=item["id"],
-                    code=item["code"],
                     name=item["name"],
-                    topic=item["topic"],
                     created_at=_datetime(item["created_at"]),
                     member_ids=set(item.get("member_ids", set())),
                 )
@@ -71,9 +69,7 @@ def get_room(room_id: str) -> RoomRecord | None:
         return None
     return RoomRecord(
         id=item["id"],
-        code=item["code"],
         name=item["name"],
-        topic=item["topic"],
         created_at=_datetime(item["created_at"]),
         member_ids=set(item.get("member_ids", set())),
     )
@@ -85,9 +81,7 @@ def create_room(room: RoomRecord) -> bool:
         table.put_item(
             Item={
                 "id": room.id,
-                "code": room.code,
                 "name": room.name,
-                "topic": room.topic,
                 "created_at": room.created_at.isoformat(),
                 "member_ids": room.member_ids,
             },
@@ -132,6 +126,7 @@ def list_messages(room_id: str) -> list[MessageRecord]:
                 MessageRecord(
                     id=item["id"],
                     room_id=item["room_id"],
+                    author_id=item.get("author_id"),
                     author=item["author"],
                     text=item["text"],
                     media_id=item.get("media_id"),
@@ -158,6 +153,7 @@ def create_message(message: MessageRecord) -> None:
         "room_id": message.room_id,
         "message_key": f"{message.created_at.isoformat()}#{message.id}",
         "id": message.id,
+        "author_id": message.author_id,
         "author": message.author,
         "text": message.text,
         "created_at": message.created_at.isoformat(),

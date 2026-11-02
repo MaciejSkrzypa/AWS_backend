@@ -5,17 +5,20 @@ from datetime import datetime
 @dataclass
 class RoomRecord:
     id: str
-    code: str
     name: str
-    topic: str
     created_at: datetime
     member_ids: set[str] = field(default_factory=set)
+
+    @property
+    def member_count(self) -> int:
+        return len(self.member_ids)
 
 
 @dataclass
 class MessageRecord:
     id: str
     room_id: str
+    author_id: str | None
     author: str
     text: str
     media_id: str | None

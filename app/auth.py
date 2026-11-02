@@ -1,8 +1,11 @@
 import os
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
+import boto3
 import jwt
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
@@ -13,6 +16,12 @@ bearer_scheme = HTTPBearer(auto_error=False)
 @lru_cache(maxsize=8)
 def _jwks_client(issuer: str) -> PyJWKClient:
     return PyJWKClient(f"{issuer}/.well-known/jwks.json")
+
+
+@dataclass(frozen=True)
+class CognitoUserProfile:
+    sub: str
+    nickname: str
 
 
 def require_cognito_access_token(
@@ -77,3 +86,58 @@ def require_cognito_access_token(
         )
 
     return claims
+
+
+def get_cognito_user_profile(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    identity: dict[str, Any] = Depends(require_cognito_access_token),
+) -> CognitoUserProfile:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Wymagane jest zalogowanie.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    region = os.getenv("COGNITO_REGION", "")
+    try:
+        response = boto3.client("cognito-idp", region_name=region).get_user(
+            AccessToken=credentials.credentials
+        )
+    except ClientError as error:
+        error_code = error.response.get("Error", {}).get("Code")
+        if error_code == "NotAuthorizedException":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token dostępu wygasł lub został unieważniony.",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from error
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Nie można pobrać profilu użytkownika z Cognito.",
+        ) from error
+    except BotoCoreError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Nie można połączyć się z usługą Cognito.",
+        ) from error
+
+    attributes = {
+        attribute["Name"]: attribute["Value"]
+        for attribute in response.get("UserAttributes", [])
+    }
+    if attributes.get("sub") != identity["sub"]:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tożsamość z profilu Cognito nie zgadza się z tokenem.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    nickname = attributes.get("preferred_username", "").strip()
+    if not nickname:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Konto nie ma ustawionego nickname'u w Cognito.",
+        )
+
+    return CognitoUserProfile(sub=identity["sub"], nickname=nickname)
