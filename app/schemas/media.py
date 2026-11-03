@@ -18,4 +18,10 @@ class MediaOut(BaseModel):
     id: str
     filename: str
     content_type: str
+    url: str | None
+    thumbnail_url: str | None = None
+    thumbnail_status: str | None = None
+
+
+class MediaDownloadOut(BaseModel):
     url: str

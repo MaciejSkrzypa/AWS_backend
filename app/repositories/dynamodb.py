@@ -179,19 +179,23 @@ def get_media(media_id: str) -> MediaRecord | None:
         filename=item["filename"],
         content_type=item["content_type"],
         object_key=item["object_key"],
+        thumbnail_status=item.get("thumbnail_status", "not_applicable"),
+        thumbnail_object_key=item.get("thumbnail_object_key"),
     )
 
 
 def save_media(media: MediaRecord) -> None:
     table = _table("DYNAMODB_MEDIA_TABLE")
+    item = {
+        "id": media.id,
+        "filename": media.filename,
+        "content_type": media.content_type,
+        "object_key": media.object_key,
+        "thumbnail_status": media.thumbnail_status,
+    }
+    if media.thumbnail_object_key:
+        item["thumbnail_object_key"] = media.thumbnail_object_key
     try:
-        table.put_item(
-            Item={
-                "id": media.id,
-                "filename": media.filename,
-                "content_type": media.content_type,
-                "object_key": media.object_key,
-            }
-        )
+        table.put_item(Item=item)
     except (BotoCoreError, ClientError) as error:
         raise _database_unavailable() from error

@@ -48,6 +48,7 @@ Pliki są przesyłane bezpośrednio z przeglądarki do prywatnego bucketu S3. Po
 | `POST` | `/api/rooms/join` | Wyszukanie i dołączenie do pokoju po identyfikatorze |
 | `GET` | `/api/rooms/{room_id}/messages` | Lista wiadomości w pokoju |
 | `POST` | `/api/rooms/{room_id}/messages` | Wysłanie wiadomości tekstowej lub z załącznikiem |
+| `GET` | `/api/rooms/{room_id}/messages/media/{media_id}/download-url` | Wygenerowanie URL-a do oryginału załącznika z kontrolą dostępu do pokoju |
 | `POST` | `/api/media/upload-url` | Wygenerowanie formularza presigned POST do uploadu bezpośrednio do S3 |
 
 Jedynym publicznym endpointem jest `GET /api/health`. Pozostałe ścieżki `/api` odrzucają brakujący lub nieprawidłowy token (401). Jeśli zmienne Cognito nie są skonfigurowane, endpointy chronione zwracają 503 i nie otwierają dostępu bez uwierzytelnienia. CORS origins można ustawić zmienną `CORS_ORIGINS` (lista originów rozdzielona przecinkami).
@@ -60,7 +61,9 @@ Tworzenie pokoju przyjmuje JSON, np.:
 }
 ```
 
-Endpoint uploadu przyjmuje JSON z `filename` i `content_type`, a zwraca `id`, `upload_url` oraz pola formularza. Frontend wysyła plik metodą `POST` bezpośrednio do S3, a zwrócone `id` przekazuje jako `media_id` podczas tworzenia wiadomości. Bucket ogranicza upload do 25 MB i typów image/audio/video. Odpowiedzi wiadomości zawierają krótkotrwały presigned URL do pobrania załącznika. Tożsamość backendu otrzymuje `s3:PutObject` i `s3:GetObject` w prefiksie `media/*` oraz ograniczone `s3:ListBucket` potrzebne do odróżnienia nieprzesłanego obiektu.
+Endpoint uploadu przyjmuje JSON z `filename` i `content_type`, a zwraca `id`, `upload_url` oraz pola formularza. Frontend wysyła plik metodą `POST` bezpośrednio do S3, a zwrócone `id` przekazuje przy tworzeniu wiadomości. Bucket ogranicza upload do 25 MB i typów image/audio/video. Po utworzeniu obrazu w S3 Lambda sprawdza jego rzeczywisty format, tworzy miniaturę WebP i zapisuje status oraz klucz miniatury w tabeli mediów. W odpowiedzi wiadomości dla obrazów znajduje się presigned URL miniatury (jeśli jest gotowa) oraz jej status; oryginał nie jest pobierany przy wyświetlaniu historii. Kliknięcie obrazu pobiera krótkotrwały URL przez `GET /api/rooms/{room_id}/messages/media/{media_id}/download-url`. Endpoint weryfikuje członkostwo w pokoju i to, czy załącznik należy do wiadomości z tego pokoju. Audio i wideo zachowują dotychczasowe zachowanie. Tożsamość backendu otrzymuje `s3:PutObject` i `s3:GetObject` w prefiksach `media/*` i `thumbnails/*` oraz ograniczone `s3:ListBucket` potrzebne do odróżnienia nieprzesłanego obiektu.
+
+Lambda również używa istniejącej roli wykonawczej, domyślnie `LabRole`; Terraform nie tworzy roli IAM. Rola musi ufać `lambda.amazonaws.com` oraz mieć dostęp do odczytu `media/*`, zapisu `thumbnails/*`, aktualizacji tabeli mediów i logowania do CloudWatch.
 
 Odpowiedź tworzenia pokoju zawiera wygenerowane pole `id` (10 znaków), które jest jednocześnie identyfikatorem i kodem dołączania. API przyjmuje identyfikator w polu `id`; zapis z łącznikami lub spacjami jest normalizowany. Odpowiedź pokoju zawiera również aktualną liczbę członków. Lista pokoi oraz odczyt i wysyłanie wiadomości są ograniczone do zalogowanego twórcy pokoju i osób, które dołączyły po identyfikatorze. Samo uwierzytelnienie nie daje dostępu do pozostałych pokojów.
 

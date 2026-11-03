@@ -31,3 +31,5 @@ class MediaRecord:
     filename: str
     content_type: str
     object_key: str
+    thumbnail_status: str = "not_applicable"
+    thumbnail_object_key: str | None = None
