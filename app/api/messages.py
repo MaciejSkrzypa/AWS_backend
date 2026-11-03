@@ -7,8 +7,10 @@ from app.auth import (
     get_cognito_user_profile,
     require_cognito_access_token,
 )
+from app.schemas.media import MediaDownloadOut
 from app.schemas.messages import MessageCreate, MessageOut
 from app.services.messages import create_message, list_messages
+from app.services.media import get_original_media_url
 
 router = APIRouter(prefix="/rooms/{room_id}/messages", tags=["messages"])
 
@@ -29,3 +31,14 @@ def post_message(
 ) -> MessageOut:
     authenticated_message = message.model_copy(update={"author": user.nickname})
     return create_message(room_id, authenticated_message, user.sub)
+
+
+@router.get("/media/{media_id}/download-url", response_model=MediaDownloadOut)
+def get_media_download_url(
+    room_id: str,
+    media_id: str,
+    identity: dict[str, Any] = Depends(require_cognito_access_token),
+) -> MediaDownloadOut:
+    return MediaDownloadOut(
+        url=get_original_media_url(media_id, room_id, identity["sub"])
+    )
