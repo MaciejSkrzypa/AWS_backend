@@ -43,16 +43,15 @@ Pliki są przesyłane bezpośrednio z przeglądarki do prywatnego bucketu S3. Po
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
 | `GET` | `/api/health` | Status API |
-| `GET` | `/api/demo/slow?delay_ms=2500` | Chroniony endpoint demonstracyjny; opóźnienie 0–10 000 ms |
 | `GET` | `/api/rooms` | Lista pokoi |
 | `POST` | `/api/rooms` | Utworzenie pokoju |
 | `POST` | `/api/rooms/join` | Wyszukanie i dołączenie do pokoju po identyfikatorze |
 | `GET` | `/api/rooms/{room_id}/messages` | Lista wiadomości w pokoju |
-| `POST` | `/api/rooms/{room_id}/messages` | Wysłanie wiadomości tekstowej lub z załącznikiem |
+| `POST` | `/api/rooms/{room_id}/messages?random_delay=yes` | Wysłanie wiadomości z losowym opóźnieniem odpowiedzi 1–3 s |
 | `GET` | `/api/rooms/{room_id}/messages/media/{media_id}/download-url` | Wygenerowanie URL-a do oryginału załącznika z kontrolą dostępu do pokoju |
 | `POST` | `/api/media/upload-url` | Wygenerowanie formularza presigned POST do uploadu bezpośrednio do S3 |
 
-Jedynym publicznym endpointem jest `GET /api/health`. Pozostałe ścieżki `/api` odrzucają brakujący lub nieprawidłowy token (401). Jeśli zmienne Cognito nie są skonfigurowane, endpointy chronione zwracają 503 i nie otwierają dostępu bez uwierzytelnienia. CORS origins można ustawić zmienną `CORS_ORIGINS` (lista originów rozdzielona przecinkami). Endpoint demonstracyjny używa asynchronicznego opóźnienia i limituje parametr `delay_ms` do 10 sekund; jest chroniony tokenem Cognito.
+Jedynym publicznym endpointem jest `GET /api/health`. Pozostałe ścieżki `/api` odrzucają brakujący lub nieprawidłowy token (401). Jeśli zmienne Cognito nie są skonfigurowane, endpointy chronione zwracają 503 i nie otwierają dostępu bez uwierzytelnienia. CORS origins można ustawić zmienną `CORS_ORIGINS` (lista originów rozdzielona przecinkami). Dodatkowy test CloudWatch korzysta z tego samego endpointu wysyłania wiadomości i parametru `random_delay=yes`; backend losuje opóźnienie od 1 do 3 sekund.
 
 Backend emituje dla każdego żądania pojedynczy log JSON z metodą, dopasowaną ścieżką, kodem HTTP i `duration_ms`. Terraform wysyła te logi do CloudWatch Logs, skąd filtr metryk publikuje czasy odpowiedzi i liczbę odpowiedzi HTTP 5xx.
 
