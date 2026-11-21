@@ -1,6 +1,9 @@
+import asyncio
+import random
 from typing import Any
+from typing import Literal
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from app.auth import (
     CognitoUserProfile,
@@ -24,11 +27,14 @@ def get_messages(
 
 
 @router.post("", response_model=MessageOut, status_code=status.HTTP_201_CREATED)
-def post_message(
+async def post_message(
     room_id: str,
     message: MessageCreate,
     user: CognitoUserProfile = Depends(get_cognito_user_profile),
+    random_delay: Literal["yes", "no"] = Query(default="no"),
 ) -> MessageOut:
+    if random_delay == "yes":
+        await asyncio.sleep(random.randint(1000, 3000) / 1000)
     authenticated_message = message.model_copy(update={"author": user.nickname})
     return create_message(room_id, authenticated_message, user.sub)
 

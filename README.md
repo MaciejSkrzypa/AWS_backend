@@ -34,7 +34,7 @@ W głównym katalogu projektu Docker Compose ładuje `backend/.env` do backendu 
 docker compose up --build
 ```
 
-Po pierwszym buildzie wystarczy `docker compose up`. Frontend pobiera identyfikatory Cognito jako konfigurację runtime, nie są one wbudowywane w obraz.
+Po pierwszym buildzie wystarczy `docker compose up`. Docker Compose przekazuje publiczne identyfikatory Cognito do Vite podczas budowania obrazu frontendu; po ich zmianie przebuduj obraz.
 
 Pliki są przesyłane bezpośrednio z przeglądarki do prywatnego bucketu S3. Pokoje, wiadomości i metadane plików są nadal przechowywane w pamięci backendu i znikają po restarcie procesu.
 
@@ -47,11 +47,13 @@ Pliki są przesyłane bezpośrednio z przeglądarki do prywatnego bucketu S3. Po
 | `POST` | `/api/rooms` | Utworzenie pokoju |
 | `POST` | `/api/rooms/join` | Wyszukanie i dołączenie do pokoju po identyfikatorze |
 | `GET` | `/api/rooms/{room_id}/messages` | Lista wiadomości w pokoju |
-| `POST` | `/api/rooms/{room_id}/messages` | Wysłanie wiadomości tekstowej lub z załącznikiem |
+| `POST` | `/api/rooms/{room_id}/messages?random_delay=yes` | Wysłanie wiadomości z losowym opóźnieniem odpowiedzi 1–3 s |
 | `GET` | `/api/rooms/{room_id}/messages/media/{media_id}/download-url` | Wygenerowanie URL-a do oryginału załącznika z kontrolą dostępu do pokoju |
 | `POST` | `/api/media/upload-url` | Wygenerowanie formularza presigned POST do uploadu bezpośrednio do S3 |
 
-Jedynym publicznym endpointem jest `GET /api/health`. Pozostałe ścieżki `/api` odrzucają brakujący lub nieprawidłowy token (401). Jeśli zmienne Cognito nie są skonfigurowane, endpointy chronione zwracają 503 i nie otwierają dostępu bez uwierzytelnienia. CORS origins można ustawić zmienną `CORS_ORIGINS` (lista originów rozdzielona przecinkami).
+Jedynym publicznym endpointem jest `GET /api/health`. Pozostałe ścieżki `/api` odrzucają brakujący lub nieprawidłowy token (401). Jeśli zmienne Cognito nie są skonfigurowane, endpointy chronione zwracają 503 i nie otwierają dostępu bez uwierzytelnienia. CORS origins można ustawić zmienną `CORS_ORIGINS` (lista originów rozdzielona przecinkami). Dodatkowy test CloudWatch korzysta z tego samego endpointu wysyłania wiadomości i parametru `random_delay=yes`; backend losuje opóźnienie od 1 do 3 sekund.
+
+Backend emituje dla każdego żądania pojedynczy log JSON z metodą, dopasowaną ścieżką, kodem HTTP i `duration_ms`. Terraform wysyła te logi do CloudWatch Logs, skąd filtr metryk publikuje czasy odpowiedzi i liczbę odpowiedzi HTTP 5xx.
 
 Tworzenie pokoju przyjmuje JSON, np.:
 
